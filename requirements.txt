@@ -1,0 +1,29 @@
+# Web Framework
+fastapi>=0.115.0,<1.0
+uvicorn[standard]>=0.30.6,<1.0
+gunicorn>=23.0.0,<24.0
+python-multipart>=0.0.9,<1.0
+jinja2>=3.1.4,<4.0
+
+# LangChain & Azure OpenAI
+langchain~=0.3.0
+langchain-openai~=0.2.0
+langchain-core~=0.3.0
+
+# OpenTelemetry Core
+opentelemetry-api~=1.27.0
+opentelemetry-sdk~=1.27.0
+opentelemetry-semantic-conventions~=0.48b0
+
+# OpenTelemetry Instrumentation
+opentelemetry-instrumentation-fastapi~=0.48b0
+opentelemetry-instrumentation-logging~=0.48b0
+opentelemetry-instrumentation-requests~=0.48b0
+
+# Azure Monitor Exporter
+azure-monitor-opentelemetry-exporter~=1.0.0b28
+
+# Utilities
+setuptools<75
+python-dotenv>=1.0.1,<2.0
+httpx>=0.27.2,<1.0
