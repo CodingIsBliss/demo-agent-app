@@ -159,6 +159,7 @@ async def run_agent(query: str) -> dict:
             "gen_ai.provider.name": AZURE_OPENAI_PROVIDER,
             "gen_ai.request.model": deployment,
             "gen_ai.agent.name": "react_agent",
+            "gen_ai.agent.id": "react_agent_01",
         },
     ) as span:
         agent = create_agent()
