@@ -143,6 +143,11 @@ The app emits spans following the [OpenTelemetry GenAI semantic conventions](htt
 |------|------|-------------|----------------|
 | LLM call | `CLIENT` | `chat gpt-4o` | `gen_ai.operation.name`, `gen_ai.request.model`, `gen_ai.provider.name`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens` |
 | Tool execution | `INTERNAL` | `execute_tool calculator` | `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type` |
-| Agent run | `INTERNAL` | `invoke_agent react_agent` | `gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.request.model` |
+| Agent run | `INTERNAL` | `invoke_agent react_agent` | `gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.agent.id`, `gen_ai.request.model` |
+
+> **Important:** In [app/agent.py](app/agent.py), replace the placeholder `gen_ai.agent.id` value with your App Service's ARM resource ID:
+> ```
+> /subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Web/sites/<app-name>
+> ```
 
 These spans power the **Application Insights → Agents (preview)** blade showing Agent Runs, Tool Calls, Models, and Token Consumption.
