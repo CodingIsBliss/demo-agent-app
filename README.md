@@ -5,24 +5,27 @@ A LangChain ReAct agent built with FastAPI, powered by Azure OpenAI GPT-4o, inst
 ## Project Structure
 
 ```
-├── README.md
-├── requirements.txt
-├── startup.sh
-└── app/
-    ├── __init__.py
-    ├── main.py          # FastAPI routes (/, /chat, /health, /config)
-    ├── agent.py          # LangChain ReAct agent + OTel tracing
-    ├── telemetry.py      # OpenTelemetry + Azure Monitor setup
-    ├── tools.py          # Agent tools (calculator, weather, web search)
-    └── templates/
-        └── index.html    # Chat UI
+├── deploy.ps1            # One-step Azure deploy script (repo root)
+├── src/
+│   ├── Dockerfile        # Container image definition
+│   ├── README.md
+│   ├── requirements.txt
+│   ├── startup.sh        # Azure App Service startup command
+│   └── app/
+│       ├── __init__.py
+│       ├── main.py       # FastAPI routes (/, /chat, /health, /config)
+│       ├── agent.py      # LangChain ReAct agent + OTel tracing
+│       ├── telemetry.py  # OpenTelemetry + Azure Monitor setup
+│       ├── tools.py      # Agent tools (calculator, weather, web search)
+│       └── templates/
+│           └── index.html  # Chat UI
 ```
 
 ## Prerequisites
 
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) installed and authenticated (`az login`)
 - PowerShell 7+ (pwsh)
-- An Azure App Service (Linux, Python 3.14)
+- An Azure App Service (Linux, Python 3.12)
 - An Azure OpenAI resource with a GPT-4o deployment
 - An Application Insights resource
 
@@ -43,7 +46,7 @@ az webapp create \
   --name demo-agent-app-sbussa \
   --resource-group Demo \
   --plan demo-agent-plan \
-  --runtime "PYTHON|3.14"
+  --runtime "PYTHON|3.12"
 ```
 
 ### 2. Set Required Secrets
@@ -59,7 +62,7 @@ az webapp config appsettings set \
     AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/" \
     AZURE_OPENAI_API_KEY="your-api-key" \
     AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o" \
-    AZURE_OPENAI_API_VERSION="2024-08-06" \
+    AZURE_OPENAI_API_VERSION="2024-10-21" \
     AGENT_RESOURCE_ID="/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Web/sites/<app-name>"
 ```
 
@@ -69,7 +72,7 @@ az webapp config appsettings set \
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI resource endpoint URL |
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI API key |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | Model deployment name (e.g. `gpt-4o`) |
-| `AZURE_OPENAI_API_VERSION` | API version (e.g. `2024-08-06`) |
+| `AZURE_OPENAI_API_VERSION` | API version (e.g. `2024-10-21`) |
 | `AGENT_RESOURCE_ID` | ARM resource ID of the App Service (e.g. `/subscriptions/.../Microsoft.Web/sites/<app-name>`) |
 
 > **Tip:** For production, use [Key Vault references](https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references) instead of storing secrets directly in app settings.
@@ -81,7 +84,7 @@ az webapp config appsettings set \
 az webapp config set \
   --resource-group Demo \
   --name demo-agent-app-sbussa \
-  --linux-fx-version "PYTHON|3.14" \
+  --linux-fx-version "PYTHON|3.12" \
   --startup-file "startup.sh"
 
 # Set non-secret app settings
@@ -96,24 +99,80 @@ az webapp config appsettings set \
 
 ### 4. Deploy
 
-Zip the repo contents and deploy:
+Use the included `deploy.ps1` script at the repo root:
 
 ```powershell
-# From the repo root
-Compress-Archive -Path app, requirements.txt, startup.sh -DestinationPath deploy.zip -Force
+# First-time setup + deploy
+.\deploy.ps1 -Setup
 
-az webapp deploy `
-  --resource-group Demo `
-  --name demo-agent-app-sbussa `
-  --src-path deploy.zip `
-  --type zip
+# Subsequent deploys
+.\deploy.ps1
 ```
 
-Verify:
+The script zips `src/` (using forward-slash paths for Linux compatibility), deploys via `az webapp deploy`, and polls the `/health` endpoint to verify.
+
+Verify manually:
 
 ```bash
 curl https://demo-agent-app-sbussa.azurewebsites.net/health
 ```
+
+### 5. Docker (Alternative)
+
+Build and run the container image locally or push to a registry:
+
+```bash
+cd src
+docker build -t demo-agent-app .
+docker run -p 8000:8000 --env-file .env demo-agent-app
+```
+
+## Run Locally
+
+### 1. Create a virtual environment
+
+```bash
+cd src
+python -m venv .venv
+
+# Linux / macOS
+source .venv/bin/activate
+
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+```
+
+### 2. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Set environment variables
+
+Create a `.env` file inside `src/` (the app loads it via `python-dotenv`):
+
+```env
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=your-api-key
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o
+AZURE_OPENAI_API_VERSION=2024-10-21
+
+# Optional – leave unset to disable telemetry locally
+# APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...
+# OTEL_SERVICE_NAME=demo-agent-app
+# AGENT_RESOURCE_ID=/subscriptions/.../Microsoft.Web/sites/<app-name>
+```
+
+> **Note:** The `.env` file is loaded automatically by `python-dotenv` and is silently skipped when absent (e.g., in production where env vars are set via App Settings).
+
+### 4. Start the dev server
+
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+Open [http://localhost:8000](http://localhost:8000) in your browser to use the chat UI.
 
 ## App Settings Reference
 
@@ -126,7 +185,7 @@ curl https://demo-agent-app-sbussa.azurewebsites.net/health
 | `AZURE_OPENAI_ENDPOINT` | ❌ | *(your endpoint)* |
 | `AZURE_OPENAI_API_KEY` | ❌ | *(your key)* |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | ❌ | *(your deployment, e.g. gpt-4o)* |
-| `AZURE_OPENAI_API_VERSION` | ❌ | *(e.g. 2024-08-06)* |
+| `AZURE_OPENAI_API_VERSION` | ❌ | *(e.g. 2024-10-21)* |
 | `AGENT_RESOURCE_ID` | ❌ | *(ARM resource ID of the App Service)* |
 
 ## Endpoints
