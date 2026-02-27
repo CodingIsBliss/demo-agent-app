@@ -1,9 +1,9 @@
-"""LangChain Agent with Azure OpenAI and OpenTelemetry tracing.
+"""LangChain Agent with Azure OpenAI and Azure AI OpenTelemetry tracing.
 
-Tracing is handled automatically by the LangchainInstrumentor configured in
-telemetry.py.  It creates spans for LLM calls, chain execution, and tool
-invocations, and records token-usage attributes following GenAI semantic
-conventions — no custom callback handler is needed.
+Tracing is handled by the AzureAIOpenTelemetryTracer from langchain-azure-ai,
+passed via .with_config().  It creates spans for LLM calls, chain execution,
+and tool invocations, and records token-usage attributes following GenAI
+semantic conventions.
 
 disable_streaming=True is required on AzureChatOpenAI so LangChain uses
 the non-streaming code path, which populates llm_output.token_usage.
@@ -15,6 +15,7 @@ from langchain_openai import AzureChatOpenAI
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.prompts import PromptTemplate
 
+from app.telemetry import get_otel_tracer
 from app.tools import all_tools
 
 REACT_PROMPT = """You are a helpful assistant with access to tools. Use them when needed.
@@ -73,14 +74,17 @@ def create_agent() -> Optional[AgentExecutor]:
 async def run_agent(query: str) -> dict:
     """Run the agent with a query and return the response.
 
-    Tracing is handled automatically by the LangchainInstrumentor.
+    Tracing is handled by the AzureAIOpenTelemetryTracer passed via with_config.
     """
     agent = create_agent()
     if not agent:
         return {"success": False, "error": "Agent not configured.", "response": None}
 
     try:
-        result = await agent.ainvoke({"input": query})
+        tracer = get_otel_tracer()
+        result = await agent.with_config(
+            {"callbacks": [tracer]}
+        ).ainvoke({"input": query})
         output = result.get("output", "")
         return {"success": True, "response": output, "error": None}
     except Exception as e:

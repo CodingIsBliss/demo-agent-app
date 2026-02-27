@@ -1,17 +1,15 @@
-"""OpenTelemetry configuration with Azure Monitor exporters and LangChain auto-instrumentation."""
+"""OpenTelemetry configuration with Azure Monitor and LangChain Azure AI tracing.
+
+The AzureAIOpenTelemetryTracer calls ``configure_azure_monitor()`` internally,
+which sets up TracerProvider, MeterProvider, and exporters for Application
+Insights.  We therefore avoid manual provider setup and let the library handle it.
+"""
 import os
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from azure.monitor.opentelemetry.exporter import (
-    AzureMonitorTraceExporter,
-    AzureMonitorMetricExporter,
-)
+from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.langchain import LangchainInstrumentor
+from langchain_azure_ai.callbacks.tracers import AzureAIOpenTelemetryTracer
+
+_otel_tracer: AzureAIOpenTelemetryTracer | None = None
 
 
 def _build_arm_resource_id() -> str:
@@ -41,38 +39,28 @@ def get_agent_resource_id() -> str:
 
 
 def setup_telemetry(app=None):
-    """Configure OpenTelemetry with Azure Monitor exporter and LangChain auto-instrumentation."""
-    connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+    """Configure OpenTelemetry with Azure Monitor and LangChain tracing.
+
+    Creates the AzureAIOpenTelemetryTracer which internally calls
+    ``configure_azure_monitor()`` to set up all providers and exporters.
+    """
+    global _otel_tracer
     service_name = os.getenv("OTEL_SERVICE_NAME", "demo-agent-app")
+    connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
 
     if not connection_string:
         print("Warning: APPLICATIONINSIGHTS_CONNECTION_STRING not set. Telemetry disabled.")
         return trace.get_tracer(service_name)
 
-    resource = Resource.create({SERVICE_NAME: service_name})
+    # Ensure the service name is available to the SDK resource detector
+    os.environ.setdefault("OTEL_SERVICE_NAME", service_name)
 
-    # Traces
-    provider = TracerProvider(resource=resource)
-    provider.add_span_processor(
-        BatchSpanProcessor(AzureMonitorTraceExporter(connection_string=connection_string))
-    )
-    trace.set_tracer_provider(provider)
-
-    # Metrics
-    metric_reader = PeriodicExportingMetricReader(
-        AzureMonitorMetricExporter(connection_string=connection_string),
-        export_interval_millis=60000,
-    )
-    metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[metric_reader]))
+    # Create the AzureAI tracer (calls configure_azure_monitor internally)
+    _otel_tracer = AzureAIOpenTelemetryTracer(id=get_agent_resource_id())
 
     # Auto-instrument FastAPI
     if app:
         FastAPIInstrumentor.instrument_app(app)
-
-    # Auto-instrument LangChain (creates spans for LLM calls, chains, tools, etc.)
-    # Use the ARM resource ID as the agent id so spans carry the Azure resource identity.
-    agent_id = get_agent_resource_id()
-    LangchainInstrumentor(agent_id=agent_id).instrument()
 
     print(f"OpenTelemetry configured for service: {service_name}")
     return trace.get_tracer(service_name)
@@ -81,3 +69,11 @@ def setup_telemetry(app=None):
 def get_tracer(name: str = "demo-agent-app"):
     """Get a tracer instance."""
     return trace.get_tracer(name)
+
+
+def get_otel_tracer() -> AzureAIOpenTelemetryTracer:
+    """Return the cached AzureAIOpenTelemetryTracer instance."""
+    global _otel_tracer
+    if _otel_tracer is None:
+        _otel_tracer = AzureAIOpenTelemetryTracer(id=get_agent_resource_id())
+    return _otel_tracer
