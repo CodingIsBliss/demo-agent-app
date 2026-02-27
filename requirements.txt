@@ -19,6 +19,7 @@ opentelemetry-semantic-conventions~=0.48b0
 opentelemetry-instrumentation-fastapi~=0.48b0
 opentelemetry-instrumentation-logging~=0.48b0
 opentelemetry-instrumentation-requests~=0.48b0
+opentelemetry-instrumentation-langchain>=0.34.0
 
 # Azure Monitor Exporter
 azure-monitor-opentelemetry-exporter~=1.0.0b28

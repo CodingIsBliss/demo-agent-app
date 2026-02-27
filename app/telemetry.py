@@ -1,4 +1,4 @@
-"""OpenTelemetry configuration with Azure Monitor exporters for traces and metrics."""
+"""OpenTelemetry configuration with Azure Monitor exporters and LangChain auto-instrumentation."""
 import os
 from opentelemetry import trace, metrics
 from opentelemetry.sdk.trace import TracerProvider
@@ -11,10 +11,37 @@ from azure.monitor.opentelemetry.exporter import (
     AzureMonitorMetricExporter,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.langchain import LangchainInstrumentor
+
+
+def _build_arm_resource_id() -> str:
+    """Construct an ARM resource ID from Azure App Service environment variables.
+
+    Uses WEBSITE_OWNER_NAME (subscription+webspace), WEBSITE_RESOURCE_GROUP,
+    and WEBSITE_SITE_NAME to build:
+      /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Web/sites/{site}
+    """
+    owner = os.getenv("WEBSITE_OWNER_NAME", "")
+    site_name = os.getenv("WEBSITE_SITE_NAME", "")
+    resource_group = os.getenv("WEBSITE_RESOURCE_GROUP", "")
+    subscription_id = owner.split("+")[0] if owner else ""
+
+    if subscription_id and site_name and resource_group:
+        return (
+            f"/subscriptions/{subscription_id}"
+            f"/resourceGroups/{resource_group}"
+            f"/providers/Microsoft.Web/sites/{site_name}"
+        )
+    return ""
+
+
+def get_agent_resource_id() -> str:
+    """Return the ARM resource ID for use as the agent identifier."""
+    return _build_arm_resource_id()
 
 
 def setup_telemetry(app=None):
-    """Configure OpenTelemetry with Azure Monitor exporter."""
+    """Configure OpenTelemetry with Azure Monitor exporter and LangChain auto-instrumentation."""
     connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
     service_name = os.getenv("OTEL_SERVICE_NAME", "demo-agent-app")
 
@@ -38,8 +65,14 @@ def setup_telemetry(app=None):
     )
     metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[metric_reader]))
 
+    # Auto-instrument FastAPI
     if app:
         FastAPIInstrumentor.instrument_app(app)
+
+    # Auto-instrument LangChain (creates spans for LLM calls, chains, tools, etc.)
+    # Use the ARM resource ID as the agent id so spans carry the Azure resource identity.
+    agent_id = get_agent_resource_id()
+    LangchainInstrumentor(agent_id=agent_id).instrument()
 
     print(f"OpenTelemetry configured for service: {service_name}")
     return trace.get_tracer(service_name)
@@ -48,26 +81,3 @@ def setup_telemetry(app=None):
 def get_tracer(name: str = "demo-agent-app"):
     """Get a tracer instance."""
     return trace.get_tracer(name)
-
-
-# ── Metrics (GenAI semantic conventions) ───────────────────────────────
-
-_meter = metrics.get_meter("gen_ai")
-
-
-def get_token_usage_metric():
-    """Histogram for gen_ai.client.token.usage (input/output token counts)."""
-    return _meter.create_histogram(
-        name="gen_ai.client.token.usage",
-        description="Measures the number of input and output tokens used",
-        unit="token",
-    )
-
-
-def get_tool_duration_metric():
-    """Histogram for gen_ai.client.tool.duration (tool call duration in seconds)."""
-    return _meter.create_histogram(
-        name="gen_ai.client.tool.duration",
-        description="Measures the duration of tool calls in seconds",
-        unit="s",
-    )

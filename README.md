@@ -60,8 +60,7 @@ az webapp config appsettings set \
     AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/" \
     AZURE_OPENAI_API_KEY="your-api-key" \
     AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o" \
-    AZURE_OPENAI_API_VERSION="2024-10-21" \
-    AGENT_RESOURCE_ID="/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Web/sites/<app-name>"
+    AZURE_OPENAI_API_VERSION="2024-10-21"
 ```
 
 | Setting | Description |
@@ -71,7 +70,6 @@ az webapp config appsettings set \
 | `AZURE_OPENAI_API_KEY` | Azure OpenAI API key |
 | `AZURE_OPENAI_DEPLOYMENT_NAME` | Model deployment name (e.g. `gpt-4o`) |
 | `AZURE_OPENAI_API_VERSION` | API version (e.g. `2024-10-21`) |
-| `AGENT_RESOURCE_ID` | ARM resource ID of the App Service (e.g. `/subscriptions/.../Microsoft.Web/sites/<app-name>`) |
 
 > **Tip:** For production, use [Key Vault references](https://learn.microsoft.com/en-us/azure/app-service/app-service-key-vault-references) instead of storing secrets directly in app settings.
 
@@ -132,7 +130,6 @@ AZURE_OPENAI_API_VERSION=2024-10-21
 # ── Telemetry (optional – remove or leave blank to disable) ─
 APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=xxxxx;IngestionEndpoint=https://eastus-x.in.applicationinsights.azure.com/
 OTEL_SERVICE_NAME=demo-agent-app
-AGENT_RESOURCE_ID=/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.Web/sites/<app-name>
 ```
 
 > **Note:** The app also loads `.env` via `python-dotenv` at startup, so the same file works for both Docker and non-Docker local runs.
@@ -156,7 +153,6 @@ Open [http://localhost:8000](http://localhost:8000) in your browser to use the c
 | `AZURE_OPENAI_API_VERSION` | ✅ | API version (e.g. `2024-10-21`) |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | — | Connection string from Application Insights |
 | `OTEL_SERVICE_NAME` | — | OpenTelemetry service name (default: `demo-agent-app`) |
-| `AGENT_RESOURCE_ID` | — | ARM resource ID of the App Service |
 | `PORT` | — | Server port (default: `8000`) |
 | `SCM_DO_BUILD_DURING_DEPLOYMENT` | — | Set to `true` for App Service zip deploy |
 
@@ -179,6 +175,6 @@ The app emits spans following the [OpenTelemetry GenAI semantic conventions](htt
 | Tool execution | `INTERNAL` | `execute_tool calculator` | `gen_ai.operation.name`, `gen_ai.tool.name`, `gen_ai.tool.type` |
 | Agent run | `INTERNAL` | `invoke_agent react_agent` | `gen_ai.operation.name`, `gen_ai.agent.name`, `gen_ai.agent.id`, `gen_ai.request.model` |
 
-The `gen_ai.agent.id` attribute is read from the `AGENT_RESOURCE_ID` environment variable (set in app settings above).
+The `gen_ai.agent.id` is automatically constructed from the Azure App Service environment variables (`WEBSITE_OWNER_NAME`, `WEBSITE_RESOURCE_GROUP`, `WEBSITE_SITE_NAME`) to form the ARM resource ID.
 
 These spans power the **Application Insights → Agents (preview)** blade showing Agent Runs, Tool Calls, Models, and Token Consumption.
